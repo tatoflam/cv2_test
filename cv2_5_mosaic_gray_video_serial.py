@@ -95,28 +95,30 @@ def recv_serial(s):
     s.close
 
 
-
 def init_serial():
-    try:
-        status, output = getstatusoutput("ls /dev/ttyUSB*")
-        port = output
-        baudrate=115200
-        print("Port status: ", status)
-        s = serial.Serial(port=port, baudrate=baudrate)
-        print("Serial is opened over %s in %i bps" % (port, baudrate))
-        return s
-    except:
-        print(traceback.format_exc())
-        print("No device found")
-        exit(1)
+
+    status, outputs = getstatusoutput("ls -1 /dev/ttyUSB*")
+    for output in outputs.split('\n'):
+        try: 
+            port = output
+            baudrate=115200
+            s = serial.Serial(port=port, baudrate=baudrate)
+            print("Serial is opened over %s in %i bps" % (port, baudrate))
+            return s
+        except:
+            print(traceback.format_exc())
+            print("No device found")
         
 
-def main():
-    s = init_serial()
+def main():        
     global serial_q
     global quit_recv
 
     try:
+        s = init_serial()
+        if (s == None):
+            print("Serial port cannot be opened")
+            exit(1)
 
         # start serial as a concurrent executor
         quit_recv = False
