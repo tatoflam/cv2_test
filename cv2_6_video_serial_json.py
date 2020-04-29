@@ -9,13 +9,21 @@ import time
 import concurrent.futures
 import queue
 
-ratio = 0.05
+import json
+
 serial_q = queue.Queue()
 quit_recv = False
-prev_item = None
-
 
 def video_stream():
+    item = None
+    prev_json_item = None
+    json_item = None
+    ratio = 0.05
+    COLOR = 1
+    GRAY = 0
+    color = COLOR
+    interval = 10
+    
     try:
         global serial_q
         cap = cv.VideoCapture(0)
@@ -30,35 +38,59 @@ def video_stream():
             if not ret:
                 print("Can't receive frame (stream end?). Exiting ...\n")
                 break
+
+            while not serial_q.empty():
+                byte_item = serial_q.get()
+                
+            # print("video_stream(): byte_item=%s:" % byte_item)
+            try:
+                item = byte_item.decode('utf8')
+                            # check stop order from receiver
+                if (item == "Stop"):
+                    print("video_stream(): got Stop from queue")
+                    break
+
+                json_item = json.loads(item)
             
-            # Convert to gray scale
-            frame_gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-            # print("accessing to serial_q")
-            item = serial_q.get()
-            print("video_stream: get_from_serial_q: %s" % item)
-            # check stop order from receiver
-            if item is "Stop":
-                break
-            elif item is None:
-                item = prev_item
+            except json.decoder.JSONDecodeError:
+                print("video_stream(): EOFError:%s" % byte_item)
+                print(traceback.format_exc())
+            except EOFError:
+                print("video_stream(): EOFError:%s" % byte_item)
+                print(traceback.format_exc())
+            # else:
+                # print("video_stream(): item=%s" % item)
+            
+
+            if (json_item == None):
+                json_item = prev_json_item
             # if receiver is working and no object in queue, use previous item
             else:
-                prev_item = item
+                prev_json_item = json_item
             
-            print("video_stream item: %s" % item)
-            
-
-#            ratio = math.floor(1/item, 3)
-#            print("ratio: ", ratio)
-            
+            print("video_stream(): json_item: %s" % json_item)
+                  
+            if (json_item != None):
+                ratio = 1 / (json_item['m_rate']/10)
+                # print("ratio %f\n" % ratio)
+                # print("m_ratio %i\n" % json_item['m_rate'])
+                
+                color = json_item['color']
+                # print("color %i\n" % color)
+                interval = json_item['interval']
+                
+            if (color == GRAY):
+                # Convert to gray scale
+                frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+                
             # make mozaic
-            imageSmall = cv.resize(frame_gray, None, fx=ratio, fy=ratio, interpolation=cv.INTER_NEAREST)
-            imageMosaic = cv.resize(imageSmall, frame_gray.shape[:2][::-1], interpolation=cv.INTER_NEAREST)
+            frameSmall = cv.resize(frame, None, fx=ratio, fy=ratio, interpolation=cv.INTER_NEAREST)
+            frame = cv.resize(frameSmall, frame.shape[:2][::-1], interpolation=cv.INTER_NEAREST)
 
             # Display the resulting frame
-            cv.imshow('imageSmall', imageMosaic)
-            # cv.imshow('image',  frame)
-            # print(np.ndarray(imageMosaic))
+            cv.imshow('image', frame)
+            
+            # print(np.ndarray(frame))
             k = cv.waitKey(1)
             if k == 27: # wait for ESC key to exit
                 break
@@ -66,6 +98,7 @@ def video_stream():
             elif k == ord('s'): # wait for 's' key to save and exit
                 cv.imwrite('mosaic_'+args[1],imageMosaic)
                 break
+            time.sleep(interval/1000)
                 
 
     except:
@@ -101,7 +134,9 @@ def recv_serial(s):
 
 def init_serial():
 
+    # scan opening serial port
     status, outputs = getstatusoutput("ls -1 /dev/ttyUSB*")
+
     for output in outputs.split('\n'):
         try: 
             port = output
@@ -132,16 +167,18 @@ def main():
         # start video stream
         video_stream()
 
+        # this block is for stoping process with terminating receive after video_stream()finished
         while True:
             try:
                 key = input()
                 time.sleep(1) # wait for checking input
                 if(key == "f"):
+                    print("accepted f command for stopping \n")
                     break
                     
                 # if anything from standard input, write back to AVR.
                 key += "\n"
-                s.write(key)
+                s.write(str.encode(key))
             except:
                 print(traceback.format_exc())
                 print("\nstop receiver thread\n")
