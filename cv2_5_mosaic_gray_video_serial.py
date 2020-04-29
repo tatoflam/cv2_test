@@ -20,7 +20,7 @@ def video_stream():
         global serial_q
         cap = cv.VideoCapture(0)
         if not cap.isOpened():
-            print("Cannot open camera")
+            print("Cannot open camera\n")
             exit(1)
         
         while True:
@@ -28,15 +28,15 @@ def video_stream():
             ret, frame = cap.read()
             # if frame is read correctly ret is True
             if not ret:
-                print("Can't receive frame (stream end?). Exiting ...")
+                print("Can't receive frame (stream end?). Exiting ...\n")
                 break
             
             # Convert to gray scale
             frame_gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             # print("accessing to serial_q")
             item = serial_q.get()
-            print("get_from_serial_q: ", item)
-            # check stop order
+            print("video_stream: get_from_serial_q: %s" % item)
+            # check stop order from receiver
             if item is "Stop":
                 break
             elif item is None:
@@ -45,7 +45,7 @@ def video_stream():
             else:
                 prev_item = item
             
-            print("item: ", item)
+            print("video_stream item: %s" % item)
             
 
 #            ratio = math.floor(1/item, 3)
@@ -81,18 +81,21 @@ def recv_serial(s):
     global serial_q
     global quit_recv
 
+    print("receiver started\n")
     while not quit_recv:
-        print("receiver started")
-
+        
         data =  s.readline()
+        
+        # this did not work - print from concurrent thread block the process
         # print("serial received(%s)" % data.encode("utf-8")) .. this did not work
-        # print("serial received(%s)" % data)
-        sys.stdout.write("\rserial received(%s)" % data)
+        print("receiver: serial received: %s" % data)
+        # sys.stdout.write("\rserial received(%s)\n" % data)
         # sys.stdout.flush()
         serial_q.put(data)
         # time.sleep(0.5)
     serial_q.put("Stop")
-    s.close
+    print("receiver stopped\n")
+
 
 
 def init_serial():
@@ -103,11 +106,11 @@ def init_serial():
             port = output
             baudrate=115200
             s = serial.Serial(port=port, baudrate=baudrate)
-            print("Serial is opened over %s in %i bps" % (port, baudrate))
+            print("Serial is opened over %s in %i bps\n" % (port, baudrate))
             return s
         except:
             print(traceback.format_exc())
-            print("No device found")
+            print("No device found\n")
         
 
 def main():        
@@ -117,7 +120,7 @@ def main():
     try:
         s = init_serial()
         if (s == None):
-            print("Serial port cannot be opened")
+            print("Serial port cannot be opened\n")
             exit(1)
 
         # start serial as a concurrent executor
@@ -130,31 +133,37 @@ def main():
 
         while True:
             try:
-                key = input().strip()
-                time.sleep(0.1) # wait for checking input
-                if(key ==""):
-                    quit_recv = True
-                    # wait until executor(receiver) finishes
-                    while not receiver.done():
-                        time.sleep(1)
-                    print("stop main")
-                    exit(0)
+                key = input()
+                time.sleep(1) # wait for checking input
+                if(key == "f"):
+                    break
                     
-
                 # if anything from standard input, write back to AVR.
                 key += "\n"
                 s.write(key)
             except:
                 print(traceback.format_exc())
-                print("\nstop receiver thread")
+                print("\nstop receiver thread\n")
                 exit(1)
         
     except concurrent.futures.CancelledError:
         print(traceback.format_exc())
-        print("executor is cancelled")
+        print("executor is cancelled\n")
     except:
         print(traceback.format_exc())
+    finally:
+        print("main is waiting")
+        # do not wait the queue empty as AVR is working asynchronouly
+        # serial_q.join()
+        
+        quit_recv = True
+        # wait until executor(receiver) finishes
+        while not receiver.done():
+            time.sleep(1)
+        s.close
 
+        print("main finished")
+        exit(0)
 
 if __name__ == "__main__":
     main()
