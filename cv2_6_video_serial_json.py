@@ -16,8 +16,9 @@ quit_recv = False
 
 def video_stream():
     item = None
+    byte_item = None
     prev_json_item = None
-    json_item = None
+    json_item =  "{'i':1,'m_rate':1,'interval':20,'color':1}"
     ratio = 0.05
     COLOR = 1
     GRAY = 0
@@ -43,45 +44,47 @@ def video_stream():
                 byte_item = serial_q.get()
                 
             # print("video_stream(): byte_item=%s:" % byte_item)
-            try:
-                item = byte_item.decode('utf8')
-                            # check stop order from receiver
-                if (item == "Stop"):
-                    print("video_stream(): got Stop from queue")
-                    break
+            
+            if (byte_item != None):
+                try:
+                    item = byte_item.decode('utf8')
+                    # check stop order from receiver
+                    if (item == "Stop"):
+                        print("video_stream(): got Stop from queue")
+                        break
 
-                json_item = json.loads(item)
+                    json_item = json.loads(item)
             
-            except json.decoder.JSONDecodeError:
-                print("video_stream(): EOFError:%s" % byte_item)
-                print(traceback.format_exc())
-            except EOFError:
-                print("video_stream(): EOFError:%s" % byte_item)
-                print(traceback.format_exc())
-            # else:
-                # print("video_stream(): item=%s" % item)
+                except json.decoder.JSONDecodeError:
+                    print("video_stream(): EOFError:%s" % byte_item)
+                    print(traceback.format_exc())
+                except EOFError:
+                    print("video_stream(): EOFError:%s" % byte_item)
+                    print(traceback.format_exc())
+                # else:
+                    # print("video_stream(): item=%s" % item)
             
 
-            if (json_item == None):
-                json_item = prev_json_item
-            # if receiver is working and no object in queue, use previous item
-            else:
-                prev_json_item = json_item
+                if (json_item == None):
+                    json_item = prev_json_item
+                # if receiver is working and no object in queue, use previous item
+                else:
+                    prev_json_item = json_item
             
-            print("video_stream(): json_item: %s" % json_item)
+                print("video_stream(): json_item: %s" % json_item)
                   
-            if (json_item != None):
-                ratio = 1 / (json_item['m_rate']/10)
-                # print("ratio %f\n" % ratio)
-                # print("m_ratio %i\n" % json_item['m_rate'])
+                if (json_item != None):
+                    ratio = 1 / (int(json_item['m_rate'])/10)
+                    # print("ratio %f\n" % ratio)
+                    # print("m_ratio %i\n" % json_item['m_rate'])
                 
-                color = json_item['color']
-                # print("color %i\n" % color)
-                interval = json_item['interval']
+                    color = json_item['color']
+                    # print("color %i\n" % color)
+                    interval = int(json_item['interval'])
                 
-            if (color == GRAY):
-                # Convert to gray scale
-                frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+                if (color == GRAY):
+                    # Convert to gray scale
+                    frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
                 
             # make mozaic
             frameSmall = cv.resize(frame, None, fx=ratio, fy=ratio, interpolation=cv.INTER_NEAREST)
@@ -98,7 +101,7 @@ def video_stream():
             elif k == ord('s'): # wait for 's' key to save and exit
                 cv.imwrite('mosaic_'+args[1],imageMosaic)
                 break
-            time.sleep(interval/1000)
+            #time.sleep(interval/1000)
                 
 
     except:
